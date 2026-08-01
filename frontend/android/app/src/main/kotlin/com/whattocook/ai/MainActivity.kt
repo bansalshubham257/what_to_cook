@@ -1,4 +1,4 @@
-package com.example.what_to_cook
+package com.whattocook.ai
 
 import io.flutter.embedding.android.FlutterActivity
 

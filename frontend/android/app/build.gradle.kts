@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.what_to_cook"
+    namespace = "com.whattocook.ai"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 

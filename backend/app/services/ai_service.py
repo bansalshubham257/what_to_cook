@@ -24,11 +24,33 @@ def _init_openai():
         AI_PROVIDER = "mock"
 
 
+def _init_groq():
+    global AI_PROVIDER, AI_CLIENT
+    try:
+        import openai
+        kwargs = {
+            "api_key": settings.AI_API_KEY,
+            "timeout": 30.0,
+            "base_url": "https://api.groq.com/openai/v1",
+        }
+        AI_CLIENT = openai.OpenAI(**kwargs)
+        AI_PROVIDER = "groq"
+        logger.info("Groq client initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Groq: {e}")
+        AI_PROVIDER = "mock"
+
+
 def get_ai_client():
     global AI_PROVIDER, AI_CLIENT
     if AI_PROVIDER is None:
-        if settings.AI_API_KEY and settings.AI_PROVIDER == "openai":
-            _init_openai()
+        if settings.AI_API_KEY:
+            if settings.AI_PROVIDER == "groq":
+                _init_groq()
+            elif settings.AI_PROVIDER == "openai":
+                _init_openai()
+            else:
+                AI_PROVIDER = "mock"
         else:
             AI_PROVIDER = "mock"
     return AI_CLIENT
