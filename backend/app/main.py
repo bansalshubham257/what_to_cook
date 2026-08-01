@@ -3,8 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.base import Base
-from app.core.database import engine
+from app.core.database import init_db
 from app.api.v1.auth import router as auth_router
 from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.kitchen import router as kitchen_router
@@ -21,8 +20,8 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} in {settings.ENVIRONMENT} mode")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created/verified")
+    init_db()
+    logger.info("Database schema and tables created/verified")
     yield
     logger.info("Shutting down")
 

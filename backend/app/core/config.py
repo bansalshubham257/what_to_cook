@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "DEBUG"
 
     DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/what_to_cook"
+    DATABASE_SCHEMA: str = "whattocook"
 
     JWT_SECRET_KEY: str = "change-this-to-a-secure-random-key"
     JWT_ALGORITHM: str = "HS256"
