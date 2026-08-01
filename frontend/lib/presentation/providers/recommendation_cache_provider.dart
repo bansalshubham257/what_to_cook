@@ -1,6 +1,5 @@
-import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/recipe_model.dart';
+import '../../data/models/recipe_model.dart';
 
 /// Simple in-memory cache that persists for the app session
 class RecommendationCache {
