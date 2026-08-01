@@ -1,4 +1,5 @@
 export 'ads_provider.dart';
+export 'recommendation_cache_provider.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/remote/api_client.dart';
