@@ -343,8 +343,11 @@ EXISTING_KIDS_TAGS = {
 }
 
 
-def main():
-    db = SessionLocal()
+def main(db=None):
+    own_session = False
+    if db is None:
+        db = SessionLocal()
+        own_session = True
     try:
         for name, (disp_en, disp_hi, cat, storage) in NEW_INGREDIENTS.items():
             if not db.query(Ingredient).filter(Ingredient.name == name).first():
@@ -415,7 +418,17 @@ def main():
         db.commit()
         print(f"\nDone. {added} new recipes added.")
     finally:
-        db.close()
+        if own_session:
+            db.close()
+
+
+def seed_all(db):
+    """Seed the database with ingredients and recipes. Can be called from API."""
+    try:
+        main(db)
+        return "success"
+    except Exception as e:
+        return f"error: {e}"
 
 
 if __name__ == "__main__":

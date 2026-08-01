@@ -411,3 +411,11 @@ def get_recipe(
             for ri, ing in ingredients
         ],
     }
+
+
+@router.post("/admin/seed")
+def seed_database(db: Session = Depends(get_db)):
+    """Seed the database with ingredients and recipes. Call once after deployment."""
+    import seed_discover
+    result = seed_discover.seed_all(db)
+    return {"message": "Seeding completed", "status": result}
