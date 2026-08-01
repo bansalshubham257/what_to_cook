@@ -24,8 +24,6 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: List[str] = ["*"]
 
-    REDIS_URL: str = "redis://localhost:6379/0"
-
     SENTRY_DSN: str = ""
 
     class Config:
