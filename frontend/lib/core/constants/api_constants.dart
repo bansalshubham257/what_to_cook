@@ -16,6 +16,7 @@ class ApiConstants {
   static const String cuisines = '/recipes/cuisines';
   static const String mealHistory = '/meals/history';
   static const String logMeal = '/meals/log';
+  static const String logDish = '/meals/log-dish';
   static const String shoppingList = '/shopping/';
   static const String shoppingAdd = '/shopping/add';
   static const String weeklyInsights = '/insights/weekly';

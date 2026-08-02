@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../providers/settings_provider.dart';
 import '../../providers/user_preferences_provider.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -65,6 +66,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _languageNames = {
     'en': 'English',
     'hi': 'Hindi',
+    'ta': 'Tamil',
+    'te': 'Telugu',
+    'bn': 'Bengali',
+    'mr': 'Marathi',
+    'gu': 'Gujarati',
+    'kn': 'Kannada',
+    'ml': 'Malayalam',
+    'pa': 'Punjabi',
+    'ur': 'Urdu',
   };
 
   @override
@@ -142,6 +152,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final appSettings = ref.watch(settingsProvider);
     return Scaffold(
       body: SafeArea(
         child: CustomScrollView(
@@ -163,6 +174,41 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                         title: const Text('Cook'),
                         subtitle: Text(_foodPreferenceLabel),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text('Appearance', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Theme Mode'),
+                            const SizedBox(height: 12),
+                            SegmentedButton<ThemeMode>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: ThemeMode.light,
+                                  icon: Icon(Icons.light_mode_outlined),
+                                  label: Text('Light'),
+                                ),
+                                ButtonSegment(
+                                  value: ThemeMode.dark,
+                                  icon: Icon(Icons.dark_mode_outlined),
+                                  label: Text('Dark'),
+                                ),
+                              ],
+                              selected: {appSettings.themeMode},
+                              onSelectionChanged: (selection) {
+                                ref
+                                    .read(settingsProvider.notifier)
+                                    .setThemeMode(selection.first);
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -526,24 +572,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Language', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 16),
-                RadioListTile<String>(
-                  value: 'en',
-                  groupValue: selected,
-                  title: const Text('English'),
-                  onChanged: (v) => setSheetState(() => selected = v!),
-                ),
-                RadioListTile<String>(
-                  value: 'hi',
-                  groupValue: selected,
-                  title: const Text('Hindi'),
-                  onChanged: (v) => setSheetState(() => selected = v!),
+                const SizedBox(height: 8),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: _languageNames.entries.map((e) => RadioListTile<String>(
+                        value: e.key,
+                        groupValue: selected,
+                        title: Text(e.value),
+                        onChanged: (v) => setSheetState(() => selected = v!),
+                      )).toList(),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: () {
                     setState(() => _language = selected);
                     _saveString(_keyLanguage, selected);
+                    ref.read(settingsProvider.notifier).setLocale(Locale(selected));
                     Navigator.pop(ctx);
                   },
                   child: const Text('Save'),

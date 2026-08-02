@@ -89,6 +89,29 @@ class RecipeRepository {
     });
   }
 
+  /// Logs a curated/user dish that may not exist in the recipes table, so it
+  /// shows up in meal history and insights. The backend finds or creates a
+  /// recipe by name using the dish details provided.
+  Future<void> logDish({
+    required String name,
+    required String mealType,
+    String? cuisine,
+    String? healthCategory,
+    String? dietType,
+    int? timeMinutes,
+    String? description,
+  }) async {
+    await _client.post(ApiConstants.logDish, data: {
+      'name': name,
+      'meal_type': mealType,
+      if (cuisine != null && cuisine.isNotEmpty) 'cuisine': cuisine,
+      if (healthCategory != null && healthCategory.isNotEmpty) 'health_category': healthCategory,
+      if (dietType != null && dietType.isNotEmpty) 'diet_type': dietType,
+      if (timeMinutes != null && timeMinutes > 0) 'time_minutes': timeMinutes,
+      if (description != null && description.isNotEmpty) 'description': description,
+    });
+  }
+
   Future<List<MealHistoryModel>> getMealHistory({int days = 30}) async {
     final response = await _client.get(ApiConstants.mealHistory, params: {'days': days});
     final List data = response.data['meals'] ?? [];

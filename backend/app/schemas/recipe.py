@@ -70,6 +70,16 @@ class MealHistoryCreate(BaseModel):
     feedback: Optional[dict] = None
 
 
+class MealDishCreate(BaseModel):
+    name: str
+    meal_type: str
+    cuisine: Optional[str] = None
+    health_category: Optional[str] = None
+    diet_type: Optional[str] = None
+    time_minutes: Optional[int] = 0
+    description: Optional[str] = None
+
+
 class MealHistoryResponse(BaseModel):
     id: UUID
     recipe_id: UUID

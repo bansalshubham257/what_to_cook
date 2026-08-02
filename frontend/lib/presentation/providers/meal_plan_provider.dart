@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/category_catalog.dart';
 import 'api_provider.dart';
+import 'local_dishes_provider.dart';
+import 'meal_history_provider.dart';
 
 /// The four meal slots a day can hold.
 const mealPlanSlots = ['breakfast', 'lunch', 'snacks', 'dinner'];
@@ -78,18 +80,56 @@ class MealPlanEntry {
       };
 }
 
-/// Marks a planned meal as "made today": persists the local [made] flag and,
-/// for database-sourced recipes (not curated dishes), best-effort logs it to
-/// meal history so it shows up under Recently Enjoyed / Meal History.
+/// Marks a planned meal as "made today": persists the local [made] flag and
+/// best-effort logs it to meal history so it shows up under Recently Enjoyed /
+/// Meal History / Insights.
+///
+/// Database recipes are logged by id. Curated dishes and locally-added dishes
+/// are logged by name (the backend creates a recipe row if needed) so insights
+/// reflect them too.
 Future<void> markMealMade(WidgetRef ref, MealPlanEntry entry) async {
   await ref
       .read(mealPlanProvider.notifier)
       .markMade(entry.dayNumber, entry.slot);
-  if (!entry.isCurated && entry.recipeId.isNotEmpty) {
+
+  if (_isUuid(entry.recipeId)) {
     try {
-      await ref.read(recipeRepositoryProvider).logMeal(entry.recipeId, entry.slot);
+      await ref
+          .read(recipeRepositoryProvider)
+          .logMeal(entry.recipeId, entry.slot);
     } catch (_) {}
+  } else {
+    CategoryDish? dish;
+    if (entry.isCurated) {
+      dish = curatedDishById(entry.recipeId);
+    }
+    if (dish == null && entry.categorySlug != null) {
+      dish = (ref.read(localDishesProvider)[entry.categorySlug!] ??
+              const <CategoryDish>[])
+          .where((d) => d.id == entry.recipeId)
+          .firstOrNull;
+    }
+    if (dish != null) {
+      try {
+        await ref.read(recipeRepositoryProvider).logDish(
+              name: dish.name,
+              mealType: entry.slot,
+              cuisine: dish.cuisine,
+              healthCategory: dish.healthCategory,
+              dietType: dish.dietType,
+              timeMinutes: dish.timeMinutes,
+              description: dish.description,
+            );
+      } catch (_) {}
+    }
   }
+  ref.invalidate(mealHistoryProvider);
+}
+
+bool _isUuid(String value) {
+  final uuid = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+  return uuid.hasMatch(value);
 }
 
 /// Every curated dish that can be placed into the plan (dish, owning category).

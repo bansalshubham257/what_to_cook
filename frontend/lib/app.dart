@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'core/constants/category_catalog.dart';
+import 'l10n/generated/app_localizations.dart';
 import 'presentation/providers/ads_provider.dart';
 import 'presentation/screens/splash/splash_screen.dart';
 import 'presentation/screens/onboarding/onboarding_screen.dart';
@@ -17,6 +18,7 @@ import 'presentation/screens/discover/dish_detail_screen.dart';
 import 'presentation/screens/insights/insights_screen.dart';
 import 'presentation/screens/profile/profile_screen.dart';
 import 'presentation/screens/profile/meal_history_screen.dart';
+import 'presentation/screens/profile/notes_screen.dart';
 import 'presentation/screens/planner/meal_plan_screen.dart';
 import 'presentation/screens/recipe/recipe_detail_screen.dart';
 import 'presentation/screens/shopping_list/shopping_list_screen.dart';
@@ -92,6 +94,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/shopping-list',
         builder: (_, __) => const ShoppingListScreen(),
       ),
+      GoRoute(
+        path: '/notes',
+        builder: (_, __) => const NotesScreen(),
+      ),
     ],
   );
 });
@@ -105,8 +111,64 @@ class ScaffoldWithNavBar extends ConsumerStatefulWidget {
 }
 
 class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
+  static const _tabCount = 5;
+
+  /// Swipes between bottom tabs while keeping the IndexedStack state intact.
+  /// A fast horizontal fling (or slow drag past half the screen) switches tabs.
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    final current = widget.navigationShell.currentIndex;
+    if (velocity < -250 && current < _tabCount - 1) {
+      widget.navigationShell.goBranch(current + 1);
+    } else if (velocity > 250 && current > 0) {
+      widget.navigationShell.goBranch(current - 1);
+    }
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    // No-op: presence here lets the gesture win over inner horizontal
+    // scrollables once the drag is strongly horizontal.
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragUpdate: _onHorizontalDragUpdate,
+      onHorizontalDragEnd: _onHorizontalDragEnd,
+      child: Scaffold(
+        body: widget.navigationShell,
+        bottomNavigationBar: _BottomNavWithBanner(
+          navigationShell: widget.navigationShell,
+          onDestinationSelected: (index) {
+            widget.navigationShell.goBranch(
+              index,
+              initialLocation: index == widget.navigationShell.currentIndex,
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Separate widget to manage banner ad lifecycle independently
+class _BottomNavWithBanner extends ConsumerStatefulWidget {
+  final StatefulNavigationShell navigationShell;
+  final ValueChanged<int> onDestinationSelected;
+  const _BottomNavWithBanner({
+    required this.navigationShell,
+    required this.onDestinationSelected,
+  });
+
+  @override
+  ConsumerState<_BottomNavWithBanner> createState() => _BottomNavWithBannerState();
+}
+
+class _BottomNavWithBannerState extends ConsumerState<_BottomNavWithBanner> {
   BannerAd? _bannerAd;
   bool _isBannerLoaded = false;
+  bool _isDisposed = false;
 
   @override
   void initState() {
@@ -115,54 +177,58 @@ class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
   }
 
   void _loadBannerAd() {
+    if (_isDisposed) return;
+    
+    _bannerAd?.dispose();
     _bannerAd = ref.read(adServiceProvider).createBannerAd(
       onLoaded: () {
-        if (mounted) {
-          setState(() => _isBannerLoaded = true);
+        if (!mounted || _isDisposed) {
+          return;
         }
+        setState(() => _isBannerLoaded = true);
       },
       onFailed: (error) {
-        if (mounted) {
-          setState(() => _isBannerLoaded = false);
-        }
+        if (!mounted || _isDisposed) return;
+        setState(() => _isBannerLoaded = false);
+        // Retry after 30 seconds
+        Future.delayed(const Duration(seconds: 30), _loadBannerAd);
       },
     )..load();
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _bannerAd?.dispose();
+    _bannerAd = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: widget.navigationShell,
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_isBannerLoaded && _bannerAd != null)
-            SizedBox(
-              width: _bannerAd!.size.width.toDouble(),
-              height: _bannerAd!.size.height.toDouble(),
-              child: AdWidget(ad: _bannerAd!),
-            ),
-          NavigationBar(
-            selectedIndex: widget.navigationShell.currentIndex,
-            onDestinationSelected: (index) {
-              widget.navigationShell.goBranch(index, initialLocation: index == widget.navigationShell.currentIndex);
-            },
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-              NavigationDestination(icon: Icon(Icons.kitchen_outlined), selectedIcon: Icon(Icons.kitchen), label: 'Kitchen'),
-              NavigationDestination(icon: Icon(Icons.restaurant_menu_outlined), selectedIcon: Icon(Icons.restaurant_menu), label: 'Suggestions'),
-              NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart), label: 'Insights'),
-              NavigationDestination(icon: Icon(Icons.person_outlined), selectedIcon: Icon(Icons.person), label: 'Profile'),
-            ],
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_isBannerLoaded && _bannerAd != null)
+          Container(
+            width: _bannerAd!.size.width.toDouble(),
+            height: _bannerAd!.size.height.toDouble(),
+            color: Colors.grey[100],
+            child: AdWidget(ad: _bannerAd!),
           ),
-        ],
-      ),
+        NavigationBar(
+          selectedIndex: widget.navigationShell.currentIndex,
+          onDestinationSelected: widget.onDestinationSelected,
+          destinations: [
+            NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: l10n.tabHome),
+            NavigationDestination(icon: const Icon(Icons.kitchen_outlined), selectedIcon: const Icon(Icons.kitchen), label: l10n.tabKitchen),
+            NavigationDestination(icon: const Icon(Icons.lightbulb_outline), selectedIcon: const Icon(Icons.lightbulb), label: l10n.tabSuggestions),
+            NavigationDestination(icon: const Icon(Icons.insights_outlined), selectedIcon: const Icon(Icons.insights), label: l10n.tabInsights),
+            NavigationDestination(icon: const Icon(Icons.person_outlined), selectedIcon: const Icon(Icons.person), label: l10n.tabProfile),
+          ],
+        ),
+      ],
     );
   }
 }

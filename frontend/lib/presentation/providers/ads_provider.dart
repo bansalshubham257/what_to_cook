@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:developer' as developer;
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -5,8 +6,12 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 /// AdMob configuration constants
 class AdConfig {
   static const String appId = 'ca-app-pub-1394062189372273~8291105865';
-  static const String bannerAdUnitId = 'ca-app-pub-1394062189372273/5477240266';
-  static const String rewardedAdUnitId = 'ca-app-pub-1394062189372273/9806387579';
+  static String get bannerAdUnitId => kDebugMode 
+      ? 'ca-app-pub-3940256099942544/6300978111' 
+      : 'ca-app-pub-1394062189372273/5477240266';
+  static String get rewardedAdUnitId => kDebugMode 
+      ? 'ca-app-pub-3940256099942544/5224354917' 
+      : 'ca-app-pub-1394062189372273/9806387579';
 }
 
 /// Service to manage AdMob ads

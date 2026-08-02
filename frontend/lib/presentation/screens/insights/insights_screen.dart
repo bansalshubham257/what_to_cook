@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../providers/api_provider.dart';
+import '../../providers/meal_history_provider.dart';
+import '../../providers/meal_plan_provider.dart';
 import '../../../core/constants/api_constants.dart';
 
 class InsightsScreen extends ConsumerStatefulWidget {
@@ -64,13 +67,18 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(mealHistoryProvider, (_, __) => _loadData());
+    ref.listen(mealPlanProvider, (_, __) => _loadData());
     final theme = Theme.of(context);
     return Scaffold(
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : CustomScrollView(
-                slivers: [
+            : RefreshIndicator(
+                onRefresh: _loadData,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -189,9 +197,10 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                      child: Card(
-                        child: ListTile(
-                          title: Text(
+                       child: Card(
+                         child: ListTile(
+                           onTap: () => context.push('/meal-plan'),
+                           title: Text(
                             'Balance My Week',
                             style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                           ),
@@ -225,9 +234,10 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                       ),
                     ),
                   ),
-                  const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
-                ],
-              ),
+                   const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
+                 ],
+               ),
+             ),
       ),
     );
   }

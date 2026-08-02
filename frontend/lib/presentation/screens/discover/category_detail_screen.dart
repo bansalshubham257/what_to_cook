@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/constants/category_catalog.dart';
 import '../../../data/models/recipe_model.dart';
 import '../../providers/api_provider.dart';
+import '../../providers/hidden_dishes_provider.dart';
 import '../../providers/local_dishes_provider.dart';
 import '../../providers/user_preferences_provider.dart';
 
@@ -34,7 +35,8 @@ class CategoryDetailScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<CategoryDetailScreen> createState() => _CategoryDetailScreenState();
+  ConsumerState<CategoryDetailScreen> createState() =>
+      _CategoryDetailScreenState();
 }
 
 class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
@@ -122,8 +124,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
       var filtered = results;
       if (multi) {
         final labels = keys.map(_labelFor).toList();
-        filtered =
-            results.where((r) => _recipeMatchesAll(r, labels)).toList();
+        filtered = results.where((r) => _recipeMatchesAll(r, labels)).toList();
       }
       if (mounted) setState(() => _dbRecipes = filtered);
     } catch (_) {}
@@ -132,7 +133,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
   bool _recipeMatchesAll(RecipeModel r, Iterable<String> labels) {
     return labels.every(
-      (label) => _matchesFilter(label, CategoryDish(id: '', name: r.name), recipe: r),
+      (label) =>
+          _matchesFilter(label, CategoryDish(id: '', name: r.name), recipe: r),
     );
   }
 
@@ -205,7 +207,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     if (preferred.isEmpty) return const [];
     final result = <CategoryDish>[];
     final seen = <String>{};
-    final existingNames = _category.hardcoded.map((d) => d.name.toLowerCase()).toSet();
+    final existingNames =
+        _category.hardcoded.map((d) => d.name.toLowerCase()).toSet();
     for (final cuisine in preferred) {
       final perCat = cuisineCategoryDishes[cuisine];
       List<CategoryDish> list;
@@ -263,7 +266,10 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
               const SizedBox(height: 10),
               Text(
                 'Just a name is enough — we will fetch the recipe details for you.',
-                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                style: Theme.of(ctx)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.grey[600]),
               ),
             ],
           ),
@@ -284,7 +290,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     final name = nameController.text.trim();
     if (saved != true || name.isEmpty) return;
 
-    final userDesc = descController.text.trim().isEmpty ? null : descController.text.trim();
+    final userDesc =
+        descController.text.trim().isEmpty ? null : descController.text.trim();
     final userTime = int.tryParse(timeController.text.trim());
 
     await _saveDish(name, userDesc: userDesc, userTime: userTime);
@@ -311,14 +318,22 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     );
 
     Map<String, dynamic>? details;
-    try {
-      details = await ref.read(recipeRepositoryProvider).enrichDish(
-            name,
-            cuisine: _category.cuisine,
-            mealType:
-                _activeCategoryKeys.isEmpty ? null : _activeCategoryKeys.first,
-          );
-    } catch (_) {}
+    for (var attempt = 0; attempt < 2 && details == null; attempt++) {
+      try {
+        details = await ref.read(recipeRepositoryProvider).enrichDish(
+              name,
+              cuisine: _category.cuisine,
+              mealType: _activeCategoryKeys.isEmpty
+                  ? null
+                  : _activeCategoryKeys.first,
+            );
+      } catch (_) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+    }
+    final fetched = details != null &&
+        (details['ingredients'] as List?)?.isNotEmpty == true &&
+        (details['instructions'] as String?)?.isNotEmpty == true;
 
     final dish = _dishFromDetails(
       name,
@@ -334,11 +349,11 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          details == null
-              ? 'Dish added to this category'
-              : '"${dish.name}" added with recipe details',
+          fetched
+              ? '"${dish.name}" added with full recipe & ingredients'
+              : '"$name" added — recipe details could not be fetched, tap it to retry',
         ),
-        backgroundColor: Colors.green,
+        backgroundColor: fetched ? Colors.green : Colors.orange,
       ),
     );
   }
@@ -350,18 +365,21 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     Map<String, dynamic>? details,
   }) {
     final rawIngredients = (details?['ingredients'] as List?) ?? const [];
-    final ingredients = rawIngredients.map((item) {
-      final m = (item as Map).cast<String, dynamic>();
-      final qty = (m['quantity'] ?? '').toString().trim();
-      final unit = (m['unit'] ?? '').toString().trim();
-      final ingName = (m['name'] ?? '').toString().trim();
-      final parts = <String>[
-        if (qty.isNotEmpty) qty,
-        if (unit.isNotEmpty && unit != 'to taste') unit,
-        if (ingName.isNotEmpty) ingName,
-      ];
-      return parts.join(' ');
-    }).where((s) => s.isNotEmpty).toList();
+    final ingredients = rawIngredients
+        .map((item) {
+          final m = (item as Map).cast<String, dynamic>();
+          final qty = (m['quantity'] ?? '').toString().trim();
+          final unit = (m['unit'] ?? '').toString().trim();
+          final ingName = (m['name'] ?? '').toString().trim();
+          final parts = <String>[
+            if (qty.isNotEmpty) qty,
+            if (unit.isNotEmpty && unit != 'to taste') unit,
+            if (ingName.isNotEmpty) ingName,
+          ];
+          return parts.join(' ');
+        })
+        .where((s) => s.isNotEmpty)
+        .toList();
 
     final aiTime = (details?['total_time_minutes'] as num?)?.toInt() ?? 0;
 
@@ -381,7 +399,9 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
       mealTypes: details?['meal_types'] != null
           ? List<String>.from(details!['meal_types'] as List)
           : null,
-      tags: details?['tags'] != null ? List<String>.from(details!['tags'] as List) : null,
+      tags: details?['tags'] != null
+          ? List<String>.from(details!['tags'] as List)
+          : null,
       ingredients: ingredients,
       instructions: details?['instructions'] as String?,
     );
@@ -391,11 +411,48 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     setState(() => _quickOnly = !_quickOnly);
   }
 
+  /// Hides a curated or database dish for this category (with undo).
+  void _hideDish(String dishName) {
+    ref.read(hiddenDishesProvider.notifier).hideDish(_category.slug, dishName);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('"$dishName" removed from this category'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => ref
+                .read(hiddenDishesProvider.notifier)
+                .unhideDish(_category.slug, dishName),
+          ),
+        ),
+      );
+  }
+
+  /// Permanently removes a user-added dish from this category (with undo).
+  void _deleteLocalDish(CategoryDish dish) {
+    ref.read(localDishesProvider.notifier).removeDish(_category.slug, dish.id);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('"${dish.name}" deleted'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => ref
+                .read(localDishesProvider.notifier)
+                .addDish(_category.slug, dish),
+          ),
+        ),
+      );
+  }
+
   bool _matchesFilter(String filter, CategoryDish dish, {RecipeModel? recipe}) {
     final time = recipe?.totalTimeMinutes ?? dish.timeMinutes;
     final mealTypes = recipe?.mealTypes ?? dish.mealTypes ?? const <String>[];
     final dietType = (recipe?.dietType ?? dish.dietType ?? '').toLowerCase();
-    final tags = (recipe?.tags ?? dish.tags ?? const <String>[]).map((t) => t.toLowerCase());
+    final tags = (recipe?.tags ?? dish.tags ?? const <String>[])
+        .map((t) => t.toLowerCase());
     final name = dish.name.toLowerCase();
     final desc = (recipe?.description ?? dish.description ?? '').toLowerCase();
     final searchable = [name, desc, ...tags].join(' ');
@@ -404,7 +461,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
       case 'Quick (<30 min)':
         return time > 0 && time < 30;
       case 'Healthy':
-        return tags.any((t) => t.contains('health')) || searchable.contains('health');
+        return tags.any((t) => t.contains('health')) ||
+            searchable.contains('health');
       case 'Breakfast':
         return mealTypes.any((m) => m.toLowerCase().contains('breakfast'));
       case 'Dinner':
@@ -444,8 +502,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                     Expanded(
                       child: Text(dish.name, style: theme.textTheme.titleLarge),
                     ),
-                    if (isLocal)
-                      _badge('Added by you'),
+                    if (isLocal) _badge('Added by you'),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -466,7 +523,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                       ),
                     if (dish.difficulty != null)
                       Chip(
-                        avatar: const Icon(Icons.local_fire_department, size: 16),
+                        avatar:
+                            const Icon(Icons.local_fire_department, size: 16),
                         label: Text(dish.difficulty!),
                         visualDensity: VisualDensity.compact,
                       ),
@@ -491,9 +549,12 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                       ),
                   ],
                 ),
-                if (dish.ingredients != null && dish.ingredients!.isNotEmpty) ...[
+                if (dish.ingredients != null &&
+                    dish.ingredients!.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  Text('Ingredients', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  Text('Ingredients',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   ...dish.ingredients!.map(
                     (ing) => Padding(
@@ -501,7 +562,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.check_circle_outline, size: 16, color: Colors.green),
+                          const Icon(Icons.check_circle_outline,
+                              size: 16, color: Colors.green),
                           const SizedBox(width: 8),
                           Expanded(child: Text(ing)),
                         ],
@@ -523,9 +585,12 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                         .toList(),
                   ),
                 ],
-                if (dish.instructions != null && dish.instructions!.isNotEmpty) ...[
+                if (dish.instructions != null &&
+                    dish.instructions!.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  Text('Instructions', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  Text('Instructions',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   ...dish.instructions!
                       .split('\n')
@@ -533,7 +598,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                       .map(
                         (step) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: 3),
-                          child: Text(step.trim(), style: theme.textTheme.bodyMedium),
+                          child: Text(step.trim(),
+                              style: theme.textTheme.bodyMedium),
                         ),
                       ),
                 ],
@@ -566,10 +632,16 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final localDishes = ref.watch(localDishesProvider)[_category.slug] ?? const <CategoryDish>[];
+    final localDishes = ref.watch(localDishesProvider)[_category.slug] ??
+        const <CategoryDish>[];
+    final hidden = ref.watch(hiddenDishesProvider);
 
-    var curated = _curatedList();
-    var dbDishes = _dbRecipes;
+    var curated = _curatedList()
+        .where((d) => !(hidden[_category.slug]?.contains(d.name) ?? false))
+        .toList();
+    var dbDishes = _dbRecipes
+        .where((r) => !(hidden[_category.slug]?.contains(r.name) ?? false))
+        .toList();
     List<CategoryDish> visibleLocal = localDishes;
 
     if (_activeCategoryKeys.isNotEmpty) {
@@ -590,11 +662,12 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
           .toList();
     }
 
-    var forYou = _forYouDishes();
+    var forYou = _forYouDishes()
+        .where((d) => !(hidden[_category.slug]?.contains(d.name) ?? false))
+        .toList();
     if (_quickOnly) {
-      forYou = forYou
-          .where((d) => d.timeMinutes > 0 && d.timeMinutes < 30)
-          .toList();
+      forYou =
+          forYou.where((d) => d.timeMinutes > 0 && d.timeMinutes < 30).toList();
     }
 
     final totalVisible =
@@ -631,7 +704,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                   if (i == 0) {
                     return FilterChip(
                       avatar: const Icon(Icons.bolt, size: 14),
-                      label: const Text('Quick (<30 min)', style: TextStyle(fontSize: 12)),
+                      label: const Text('Quick (<30 min)',
+                          style: TextStyle(fontSize: 12)),
                       selected: _quickOnly,
                       onSelected: (_) => _toggleQuickOnly(),
                     );
@@ -660,10 +734,15 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   '$_activeCategorySummary${_quickOnly ? ' · Quick' : ''} · $totalVisible dish(es)',
-                  style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+                  style:
+                      theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
                 ),
               ),
-            if (curated.isEmpty && dbDishes.isEmpty && visibleLocal.isEmpty && forYou.isEmpty && !_isLoadingDb)
+            if (curated.isEmpty &&
+                dbDishes.isEmpty &&
+                visibleLocal.isEmpty &&
+                forYou.isEmpty &&
+                !_isLoadingDb)
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Center(
@@ -681,7 +760,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                   padding: const EdgeInsets.only(top: 4, bottom: 8),
                   child: Text('For you',
                       style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600, color: theme.colorScheme.primary)),
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary)),
                 ),
                 ...forYou.map((d) => _curatedTile(theme, d)),
                 const Divider(height: 24),
@@ -717,6 +797,20 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
       title: dish.name,
       subtitle: dish.description ?? '',
       trailingText: dish.timeMinutes > 0 ? '${dish.timeMinutes} min' : '',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (dish.timeMinutes > 0)
+            Text('${dish.timeMinutes} min',
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey)),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Remove',
+            icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+            onPressed: () => _hideDish(dish.name),
+          ),
+        ],
+      ),
       onTap: () => _showDishInfo(dish),
     );
   }
@@ -727,7 +821,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: recipe.imageUrl != null
-            ? Image.network(recipe.imageUrl!, width: 44, height: 44, fit: BoxFit.cover)
+            ? Image.network(recipe.imageUrl!,
+                width: 44, height: 44, fit: BoxFit.cover)
             : Container(
                 width: 44,
                 height: 44,
@@ -738,7 +833,18 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
       title: recipe.name,
       subtitle:
           '${recipe.totalTimeMinutes} min · ${recipe.healthCategory ?? 'Balanced'}',
-      trailing: const Icon(Icons.chevron_right),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Remove',
+            icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+            onPressed: () => _hideDish(recipe.name),
+          ),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
       onTap: () => context.push('/recipe/${recipe.id}'),
     );
   }
@@ -766,8 +872,15 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
             Text('${dish.timeMinutes} min',
                 style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey)),
           IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Delete',
+            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+            onPressed: () => _deleteLocalDish(dish),
+          ),
+          IconButton(
             icon: const Icon(Icons.chevron_right, size: 20, color: Colors.grey),
-            onPressed: () => context.push('/dish', extra: (dish, _category.slug)),
+            onPressed: () =>
+                context.push('/dish', extra: (dish, _category.slug)),
           ),
         ],
       ),
@@ -794,7 +907,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
             Flexible(
               child: Text(
                 title,
-                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -815,7 +929,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
         trailing: trailing ??
             (trailingText.isNotEmpty
                 ? Text(trailingText,
-                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey))
+                    style:
+                        theme.textTheme.bodySmall?.copyWith(color: Colors.grey))
                 : null),
         onTap: onTap,
       ),

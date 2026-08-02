@@ -23,7 +23,8 @@ class LocalDishesNotifier extends Notifier<Map<String, List<CategoryDish>>> {
       final map = <String, List<CategoryDish>>{};
       decoded.forEach((slug, list) {
         map[slug] = (list as List)
-            .map((e) => CategoryDish.fromJson((e as Map).cast<String, dynamic>()))
+            .map((e) =>
+                CategoryDish.fromJson((e as Map).cast<String, dynamic>()))
             .toList();
       });
       state = map;
@@ -48,11 +49,22 @@ class LocalDishesNotifier extends Notifier<Map<String, List<CategoryDish>>> {
     await _persist(updated);
   }
 
+  /// Replaces a dish in a category with an enriched copy (used when the AI
+  /// recipe details are (re)fetched after the dish was added with just a name).
+  Future<void> updateDish(String categorySlug, CategoryDish dish) async {
+    final current = state[categorySlug] ?? [];
+    final updated = Map<String, List<CategoryDish>>.from(state);
+    updated[categorySlug] =
+        current.map((d) => d.id == dish.id ? dish : d).toList();
+    state = updated;
+    await _persist(updated);
+  }
+
   Future<void> _persist(Map<String, List<CategoryDish>> map) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final encoded = jsonEncode(map.map(
-          (k, v) => MapEntry(k, v.map((d) => d.toJson()).toList())));
+      final encoded = jsonEncode(
+          map.map((k, v) => MapEntry(k, v.map((d) => d.toJson()).toList())));
       await prefs.setString(_prefsKey, encoded);
     } catch (_) {}
   }

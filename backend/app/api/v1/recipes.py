@@ -370,9 +370,24 @@ def get_recipe(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    recipe = db.query(Recipe).filter(Recipe.id == recipe_id, Recipe.is_active == True).first()
+    from uuid import UUID
+    from sqlalchemy.exc import DataError
+
+    try:
+        recipe_uuid = UUID(recipe_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    try:
+        recipe = (
+            db.query(Recipe)
+            .filter(Recipe.id == recipe_uuid, Recipe.is_active == True)
+            .first()
+        )
+    except DataError:
+        raise HTTPException(status_code=404, detail="Recipe not found")
     if not recipe:
-        return {"error": "Recipe not found"}, 404
+        raise HTTPException(status_code=404, detail="Recipe not found")
 
     ingredients = (
         db.query(RecipeIngredient, Ingredient)

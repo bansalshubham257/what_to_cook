@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/category_catalog.dart';
 import '../../../data/models/recipe_model.dart';
 import '../../providers/api_provider.dart';
+import '../../providers/ads_provider.dart';
 import '../../providers/meal_plan_provider.dart';
 
 /// Weekly/monthly meal planner with a calendar-style tabular view. Four slots
@@ -97,9 +98,30 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen> {
                       ),
                       FilledButton.icon(
                         onPressed: () async {
-                          final notifier = ref.read(mealPlanProvider.notifier);
-                          await notifier.generatePlan(startDay: startDay, days: days);
-                          if (context.mounted) {
+                          final adService = ref.read(adServiceProvider);
+                          final bool adShown = await adService.showRewardedAd(
+                            onRewarded: () {},
+                            onAdDismissed: () async {
+                              final notifier = ref.read(mealPlanProvider.notifier);
+                              await notifier.generatePlan(startDay: startDay, days: days);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context)
+                                  ..hideCurrentSnackBar()
+                                  ..showSnackBar(
+                                    SnackBar(
+                                      content: Text(_monthMode
+                                          ? 'Month plan generated!'
+                                          : 'Week plan generated!'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                              }
+                            },
+                          );
+                          if (!adShown && context.mounted) {
+                            // If ad not available, generate directly
+                            final notifier = ref.read(mealPlanProvider.notifier);
+                            await notifier.generatePlan(startDay: startDay, days: days);
                             ScaffoldMessenger.of(context)
                               ..hideCurrentSnackBar()
                               ..showSnackBar(
