@@ -5,6 +5,8 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'core/constants/category_catalog.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'presentation/providers/ads_provider.dart';
+import 'presentation/providers/meal_history_provider.dart';
+import 'presentation/providers/notes_provider.dart';
 import 'presentation/screens/splash/splash_screen.dart';
 import 'presentation/screens/onboarding/onboarding_screen.dart';
 import 'presentation/screens/home/home_screen.dart';
@@ -19,6 +21,7 @@ import 'presentation/screens/insights/insights_screen.dart';
 import 'presentation/screens/profile/profile_screen.dart';
 import 'presentation/screens/profile/meal_history_screen.dart';
 import 'presentation/screens/profile/notes_screen.dart';
+import 'presentation/screens/profile/note_detail_screen.dart';
 import 'presentation/screens/planner/meal_plan_screen.dart';
 import 'presentation/screens/recipe/recipe_detail_screen.dart';
 import 'presentation/screens/shopping_list/shopping_list_screen.dart';
@@ -28,30 +31,48 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
-      GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
+      GoRoute(
+          path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
       StatefulShellRoute.indexedStack(
-        builder: (_, __, navigationShell) => ScaffoldWithNavBar(navigationShell: navigationShell),
+        builder: (_, __, navigationShell) =>
+            ScaffoldWithNavBar(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(
-            routes: [GoRoute(path: '/home', builder: (_, __) => const HomeScreen())],
+            routes: [
+              GoRoute(path: '/home', builder: (_, __) => const HomeScreen())
+            ],
           ),
           StatefulShellBranch(
-            routes: [GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen())],
+            routes: [
+              GoRoute(
+                  path: '/kitchen', builder: (_, __) => const KitchenScreen())
+            ],
           ),
           StatefulShellBranch(
-            routes: [GoRoute(path: '/suggestions', builder: (_, __) => const SuggestionsScreen())],
+            routes: [
+              GoRoute(
+                  path: '/suggestions',
+                  builder: (_, __) => const SuggestionsScreen())
+            ],
           ),
           StatefulShellBranch(
-            routes: [GoRoute(path: '/insights', builder: (_, __) => const InsightsScreen())],
+            routes: [
+              GoRoute(
+                  path: '/insights', builder: (_, __) => const InsightsScreen())
+            ],
           ),
           StatefulShellBranch(
-            routes: [GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen())],
+            routes: [
+              GoRoute(
+                  path: '/profile', builder: (_, __) => const ProfileScreen())
+            ],
           ),
         ],
       ),
       GoRoute(
         path: '/recipe/:id',
-        builder: (_, state) => RecipeDetailScreen(recipeId: state.pathParameters['id']!),
+        builder: (_, state) =>
+            RecipeDetailScreen(recipeId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/favorites',
@@ -98,6 +119,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/notes',
         builder: (_, __) => const NotesScreen(),
       ),
+      GoRoute(
+        path: '/note',
+        builder: (_, state) => NoteDetailScreen(note: state.extra as NoteEntry),
+      ),
     ],
   );
 });
@@ -112,6 +137,13 @@ class ScaffoldWithNavBar extends ConsumerStatefulWidget {
 
 class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
   static const _tabCount = 5;
+  static const _insightsIndex = 3;
+
+  void _maybeRefreshInsights(int index) {
+    if (index == _insightsIndex) {
+      ref.read(insightsRefreshProvider.notifier).bump();
+    }
+  }
 
   /// Swipes between bottom tabs while keeping the IndexedStack state intact.
   /// A fast horizontal fling (or slow drag past half the screen) switches tabs.
@@ -120,8 +152,10 @@ class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
     final current = widget.navigationShell.currentIndex;
     if (velocity < -250 && current < _tabCount - 1) {
       widget.navigationShell.goBranch(current + 1);
+      _maybeRefreshInsights(current + 1);
     } else if (velocity > 250 && current > 0) {
       widget.navigationShell.goBranch(current - 1);
+      _maybeRefreshInsights(current - 1);
     }
   }
 
@@ -145,6 +179,7 @@ class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
               index,
               initialLocation: index == widget.navigationShell.currentIndex,
             );
+            _maybeRefreshInsights(index);
           },
         ),
       ),
@@ -162,7 +197,8 @@ class _BottomNavWithBanner extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_BottomNavWithBanner> createState() => _BottomNavWithBannerState();
+  ConsumerState<_BottomNavWithBanner> createState() =>
+      _BottomNavWithBannerState();
 }
 
 class _BottomNavWithBannerState extends ConsumerState<_BottomNavWithBanner> {
@@ -178,7 +214,7 @@ class _BottomNavWithBannerState extends ConsumerState<_BottomNavWithBanner> {
 
   void _loadBannerAd() {
     if (_isDisposed) return;
-    
+
     _bannerAd?.dispose();
     _bannerAd = ref.read(adServiceProvider).createBannerAd(
       onLoaded: () {
@@ -221,11 +257,26 @@ class _BottomNavWithBannerState extends ConsumerState<_BottomNavWithBanner> {
           selectedIndex: widget.navigationShell.currentIndex,
           onDestinationSelected: widget.onDestinationSelected,
           destinations: [
-            NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: l10n.tabHome),
-            NavigationDestination(icon: const Icon(Icons.kitchen_outlined), selectedIcon: const Icon(Icons.kitchen), label: l10n.tabKitchen),
-            NavigationDestination(icon: const Icon(Icons.lightbulb_outline), selectedIcon: const Icon(Icons.lightbulb), label: l10n.tabSuggestions),
-            NavigationDestination(icon: const Icon(Icons.insights_outlined), selectedIcon: const Icon(Icons.insights), label: l10n.tabInsights),
-            NavigationDestination(icon: const Icon(Icons.person_outlined), selectedIcon: const Icon(Icons.person), label: l10n.tabProfile),
+            NavigationDestination(
+                icon: const Icon(Icons.home_outlined),
+                selectedIcon: const Icon(Icons.home),
+                label: l10n.tabHome),
+            NavigationDestination(
+                icon: const Icon(Icons.kitchen_outlined),
+                selectedIcon: const Icon(Icons.kitchen),
+                label: l10n.tabKitchen),
+            NavigationDestination(
+                icon: const Icon(Icons.lightbulb_outline),
+                selectedIcon: const Icon(Icons.lightbulb),
+                label: l10n.tabSuggestions),
+            NavigationDestination(
+                icon: const Icon(Icons.insights_outlined),
+                selectedIcon: const Icon(Icons.insights),
+                label: l10n.tabInsights),
+            NavigationDestination(
+                icon: const Icon(Icons.person_outlined),
+                selectedIcon: const Icon(Icons.person),
+                label: l10n.tabProfile),
           ],
         ),
       ],

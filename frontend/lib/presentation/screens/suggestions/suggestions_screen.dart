@@ -226,36 +226,23 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
     }
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 6),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(recipe.name,
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600)),
-            ),
-            if (item.isFavorite)
-              const Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: Icon(Icons.favorite, size: 14, color: Colors.red),
-              ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
-            children: [
-              Icon(statusIcon, size: 14, color: statusColor),
-              const SizedBox(width: 4),
-              Expanded(
-                  child: Text(statusText, style: theme.textTheme.bodySmall)),
-            ],
-          ),
-        ),
+        dense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        leading: Icon(statusIcon, size: 18, color: statusColor),
+        title: Text(recipe.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style:
+                theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+        subtitle: Text(statusText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600])),
         trailing: Text('${recipe.totalTimeMinutes} min',
-            style: theme.textTheme.bodySmall),
+            style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
         onTap: () => _openRecipe(recipe.id),
       ),
     );
@@ -284,24 +271,24 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
 
   Widget _buildShimmerRecipeCard(ThemeData theme) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 6),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               width: 180,
-              height: 14,
+              height: 13,
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Container(
               width: double.infinity,
-              height: 12,
+              height: 11,
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(4),

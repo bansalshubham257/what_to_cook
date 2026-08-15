@@ -24,12 +24,32 @@ class _DishDetailScreenState extends ConsumerState<DishDetailScreen> {
   bool _showCookingMode = false;
   int _currentStep = 0;
   bool _isFetchingRecipe = false;
+  bool _recipeFetchFailed = false;
+
+  /// AI-fetched details for curated dishes, kept in memory only so they are not
+  /// persisted as duplicates of the hardcoded dish. User-added dishes are saved
+  /// via [localDishesProvider] instead.
+  CategoryDish? _enrichedDish;
 
   CategoryDish get dish {
     final dishes = ref.watch(localDishesProvider)[widget.categorySlug] ??
         const <CategoryDish>[];
-    return dishes.where((d) => d.id == widget.dish.id).firstOrNull ??
-        widget.dish;
+    final found = dishes.where((d) => d.id == widget.dish.id).firstOrNull;
+    if (found != null) return found;
+    return _enrichedDish ?? widget.dish;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.dish;
+    final hasFull = (initial.ingredients?.isNotEmpty ?? false) &&
+        (initial.instructions?.isNotEmpty ?? false);
+    if (!hasFull) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _fetchRecipeFromAi();
+      });
+    }
   }
 
   bool get _hasFullRecipe =>
@@ -42,10 +62,13 @@ class _DishDetailScreenState extends ConsumerState<DishDetailScreen> {
       .map((s) => s.trim())
       .toList();
 
-  /// Fetches (or re-fetches) the full recipe from the AI and saves it onto the
-  /// locally-added dish so ingredients & instructions appear.
+  /// Auto-fetches (or re-fetches) the full recipe from the AI and saves it onto
+  /// the locally-added dish so ingredients & instructions appear.
   Future<void> _fetchRecipeFromAi() async {
-    setState(() => _isFetchingRecipe = true);
+    setState(() {
+      _isFetchingRecipe = true;
+      _recipeFetchFailed = false;
+    });
     Map<String, dynamic>? details;
     try {
       details = await ref.read(recipeRepositoryProvider).enrichDish(
@@ -99,21 +122,23 @@ class _DishDetailScreenState extends ConsumerState<DishDetailScreen> {
         ingredients: ingredients,
         instructions: details['instructions'] as String?,
       );
-      await ref
-          .read(localDishesProvider.notifier)
-          .updateDish(widget.categorySlug, enriched);
+      final isLocal = (ref.read(localDishesProvider)[widget.categorySlug] ??
+              const <CategoryDish>[])
+          .any((d) => d.id == dish.id);
+      if (isLocal) {
+        await ref
+            .read(localDishesProvider.notifier)
+            .updateDish(widget.categorySlug, enriched);
+      } else {
+        _enrichedDish = enriched;
+      }
     }
 
     if (!mounted) return;
-    setState(() => _isFetchingRecipe = false);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(fetched
-            ? 'Recipe details added for ${dish.name}'
-            : 'Could not fetch recipe details right now. Try again.'),
-        backgroundColor: fetched ? Colors.green : Colors.orange,
-      ));
+    setState(() {
+      _isFetchingRecipe = false;
+      _recipeFetchFailed = !fetched;
+    });
   }
 
   Future<void> _deleteDish() async {
@@ -230,19 +255,45 @@ class _DishDetailScreenState extends ConsumerState<DishDetailScreen> {
             ),
             if (!_hasFullRecipe) ...[
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _isFetchingRecipe ? null : _fetchRecipeFromAi,
-                  icon: _isFetchingRecipe
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.auto_awesome),
-                  label: const Text('Fetch full recipe from AI'),
+              if (_isFetchingRecipe)
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Fetching full recipe details...',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                )
+              else if (_recipeFetchFailed)
+                Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 16, color: Colors.orange[700]),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Recipe details unavailable right now.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: Colors.grey),
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      tooltip: 'Retry',
+                      onPressed: _fetchRecipeFromAi,
+                    ),
+                  ],
                 ),
-              ),
             ],
             const SizedBox(height: 24),
             const Divider(height: 1),

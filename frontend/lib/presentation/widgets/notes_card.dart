@@ -45,9 +45,14 @@ class _NotesCardState extends ConsumerState<NotesCard> {
       onTap: () => context.push('/notes'),
       child: Card(
         elevation: 0,
-        color:
-            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.52),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.55),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(
+            color: theme.colorScheme.primary.withValues(alpha: 0.35),
+            width: 1,
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -195,82 +200,87 @@ class _NotesCardState extends ConsumerState<NotesCard> {
               ),
             ),
             for (final note in group.notes)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (note.imagePath.isNotEmpty &&
-                        File(note.imagePath).existsSync()) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          File(note.imagePath),
-                          width: 58,
-                          height: 58,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            note.title,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight:
-                                  note.bold ? FontWeight.w800 : FontWeight.w600,
-                              fontStyle: note.italic ? FontStyle.italic : null,
-                            ),
+              GestureDetector(
+                onTap: () => context.push('/note', extra: note),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (note.imagePath.isNotEmpty &&
+                          File(note.imagePath).existsSync()) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(
+                            File(note.imagePath),
+                            width: 58,
+                            height: 58,
+                            fit: BoxFit.cover,
                           ),
-                          if (note.body.isNotEmpty) ...[
-                            const SizedBox(height: 4),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              note.body,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ],
-                          if (note.recipe.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Recipe: ${note.recipe}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ],
-                          if (note.link.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              note.link,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.primary,
-                                decoration: TextDecoration.underline,
+                              note.title,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: note.bold
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                                fontStyle:
+                                    note.italic ? FontStyle.italic : null,
                               ),
                             ),
+                            if (note.body.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                note.body,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
+                            if (note.recipe.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Recipe: ${note.recipe}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
+                            if (note.link.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                note.link,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.delete_outline, size: 18),
-                      onPressed: () => ref
-                          .read(notesProvider.notifier)
-                          .remove(group.id, note.id),
-                    ),
-                  ],
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        onPressed: () => ref
+                            .read(notesProvider.notifier)
+                            .remove(group.id, note.id),
+                      ),
+                    ],
+                  ),
                 ),
               ),
           ],

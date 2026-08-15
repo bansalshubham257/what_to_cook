@@ -81,49 +81,74 @@ class MealPlanEntry {
 }
 
 /// Marks a planned meal as "made today": persists the local [made] flag and
-/// best-effort logs it to meal history so it shows up under Recently Enjoyed /
-/// Meal History / Insights.
-///
-/// Database recipes are logged by id. Curated dishes and locally-added dishes
-/// are logged by name (the backend creates a recipe row if needed) so insights
-/// reflect them too.
-Future<void> markMealMade(WidgetRef ref, MealPlanEntry entry) async {
+/// logs it to meal history so it shows up under Recently Enjoyed / Meal
+/// History / Insights. Returns true when the backend log succeeded (so
+/// insights reflect it) and false when only the local flag could be saved.
+Future<bool> markMealMade(WidgetRef ref, MealPlanEntry entry) async {
   await ref
       .read(mealPlanProvider.notifier)
       .markMade(entry.dayNumber, entry.slot);
 
+  final synced = await _logEntryToBackend(ref, entry);
+  ref.invalidate(mealHistoryProvider);
+  return synced;
+}
+
+/// Re-attempts the backend log for an entry that is already marked made (for
+/// example when an earlier sync failed). Does not touch the local flag.
+Future<bool> reLogMeal(WidgetRef ref, MealPlanEntry entry) async {
+  final synced = await _logEntryToBackend(ref, entry);
+  ref.invalidate(mealHistoryProvider);
+  return synced;
+}
+
+Future<bool> _logEntryToBackend(WidgetRef ref, MealPlanEntry entry) async {
   if (_isUuid(entry.recipeId)) {
     try {
       await ref
           .read(recipeRepositoryProvider)
           .logMeal(entry.recipeId, entry.slot);
-    } catch (_) {}
-  } else {
-    CategoryDish? dish;
-    if (entry.isCurated) {
-      dish = curatedDishById(entry.recipeId);
-    }
-    if (dish == null && entry.categorySlug != null) {
-      dish = (ref.read(localDishesProvider)[entry.categorySlug!] ??
-              const <CategoryDish>[])
-          .where((d) => d.id == entry.recipeId)
-          .firstOrNull;
-    }
-    if (dish != null) {
-      try {
-        await ref.read(recipeRepositoryProvider).logDish(
-              name: dish.name,
-              mealType: entry.slot,
-              cuisine: dish.cuisine,
-              healthCategory: dish.healthCategory,
-              dietType: dish.dietType,
-              timeMinutes: dish.timeMinutes,
-              description: dish.description,
-            );
-      } catch (_) {}
+      return true;
+    } catch (_) {
+      return false;
     }
   }
-  ref.invalidate(mealHistoryProvider);
+
+  CategoryDish? dish;
+  if (entry.isCurated) {
+    dish = curatedDishById(entry.recipeId);
+  }
+  if (dish == null && entry.categorySlug != null) {
+    dish = (ref.read(localDishesProvider)[entry.categorySlug!] ??
+            const <CategoryDish>[])
+        .where((d) => d.id == entry.recipeId)
+        .firstOrNull;
+  }
+  if (dish == null) return false;
+
+  try {
+    await ref.read(recipeRepositoryProvider).logDish(
+          name: dish.name,
+          mealType: entry.slot,
+          cuisine: dish.cuisine ?? _cuisineFromSlug(entry.categorySlug),
+          healthCategory: dish.healthCategory,
+          dietType: dish.dietType,
+          timeMinutes: dish.timeMinutes,
+          description: dish.description,
+        );
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Extracts the cuisine name from a category slug like `cuisine-north_indian`
+/// or `cuisine-gujarati-breakfast`.
+String? _cuisineFromSlug(String? categorySlug) {
+  if (categorySlug == null || !categorySlug.startsWith('cuisine-')) return null;
+  final parts = categorySlug.split('-');
+  if (parts.length == 2) return parts[1];
+  return parts.sublist(1, parts.length - 1).join('-');
 }
 
 bool _isUuid(String value) {
@@ -148,7 +173,8 @@ List<(CategoryDish, String)> preferredMealPlanOptions({
   required String foodPreference,
 }) {
   final result = <(CategoryDish, String)>[];
-  final preferredCuisines = cuisines.isEmpty ? const ['north_indian'] : cuisines;
+  final preferredCuisines =
+      cuisines.isEmpty ? const ['north_indian'] : cuisines;
 
   for (final cuisine in preferredCuisines) {
     final byCategory = cuisineCategoryDishes[cuisine];
@@ -161,7 +187,8 @@ List<(CategoryDish, String)> preferredMealPlanOptions({
         }
       }
     }
-    for (final dish in curatedCuisineDishes[cuisine] ?? const <CategoryDish>[]) {
+    for (final dish
+        in curatedCuisineDishes[cuisine] ?? const <CategoryDish>[]) {
       if (_allowedForFoodPreference(dish, foodPreference)) {
         result.add((dish, 'cuisine-$cuisine'));
       }
@@ -197,7 +224,13 @@ bool _allowedForFoodPreference(CategoryDish dish, String foodPreference) {
 
   switch (foodPreference) {
     case 'vegan':
-      return !hasNonVeg && !hasEgg && !text.contains('paneer') && !text.contains('curd') && !text.contains('milk') && !text.contains('ghee') && !text.contains('cheese');
+      return !hasNonVeg &&
+          !hasEgg &&
+          !text.contains('paneer') &&
+          !text.contains('curd') &&
+          !text.contains('milk') &&
+          !text.contains('ghee') &&
+          !text.contains('cheese');
     case 'vegetarian':
       return !hasNonVeg && !hasEgg;
     case 'vegetarian_egg':
@@ -207,13 +240,33 @@ bool _allowedForFoodPreference(CategoryDish dish, String foodPreference) {
   }
 }
 
-/// Looks up a curated dish by its stable id across all special categories.
-CategoryDish? curatedDishById(String id) {
-  for (final (dish, _) in mealPlanOptions()) {
-    if (dish.id == id) return dish;
+/// Every curated dish across the special + cuisine catalogs, keyed by its
+/// stable id. Built once so plan entries (which may come from either catalog)
+/// can be resolved back to a dish when logging a meal.
+final Map<String, CategoryDish> _curatedDishesById = () {
+  final map = <String, CategoryDish>{};
+  void addAll(Iterable<CategoryDish> dishes) {
+    for (final d in dishes) {
+      map.putIfAbsent(d.id, () => d);
+    }
   }
-  return null;
-}
+
+  for (final c in kSpecialCategories) {
+    addAll(c.hardcoded);
+  }
+  for (final list in curatedCuisineDishes.values) {
+    addAll(list);
+  }
+  for (final byCategory in cuisineCategoryDishes.values) {
+    for (final list in byCategory.values) {
+      addAll(list);
+    }
+  }
+  return map;
+}();
+
+/// Looks up a curated dish by its stable id across every catalog.
+CategoryDish? curatedDishById(String id) => _curatedDishesById[id];
 
 /// Category label for a special-category slug (used in the planner picker).
 String specialCategoryLabel(String slug) {
@@ -255,7 +308,8 @@ class MealPlanNotifier extends Notifier<Map<String, MealPlanEntry>> {
       if (raw == null) return;
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       state = decoded.map(
-        (k, v) => MapEntry(k, MealPlanEntry.fromJson((v as Map).cast<String, dynamic>())),
+        (k, v) => MapEntry(
+            k, MealPlanEntry.fromJson((v as Map).cast<String, dynamic>())),
       );
     } catch (_) {}
   }
@@ -289,7 +343,8 @@ class MealPlanNotifier extends Notifier<Map<String, MealPlanEntry>> {
   Future<void> generatePlan({required int startDay, required int days}) async {
     final prefs = await SharedPreferences.getInstance();
     final pool = preferredMealPlanOptions(
-      cuisines: prefs.getStringList('cuisine_preferences') ?? const ['north_indian'],
+      cuisines:
+          prefs.getStringList('cuisine_preferences') ?? const ['north_indian'],
       foodPreference: prefs.getString('food_preference') ?? 'vegetarian',
     );
     if (pool.isEmpty) return;
@@ -331,4 +386,5 @@ class MealPlanNotifier extends Notifier<Map<String, MealPlanEntry>> {
 }
 
 final mealPlanProvider =
-    NotifierProvider<MealPlanNotifier, Map<String, MealPlanEntry>>(MealPlanNotifier.new);
+    NotifierProvider<MealPlanNotifier, Map<String, MealPlanEntry>>(
+        MealPlanNotifier.new);

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../providers/home_suggestions_provider.dart';
+import '../../providers/local_dishes_provider.dart';
 import '../../providers/meal_plan_provider.dart';
 import '../../providers/suggestions_providers.dart';
 import '../../widgets/notes_card.dart';
@@ -37,9 +38,13 @@ class HomeScreen extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(_greeting(l10n),
-                                  style: theme.textTheme.bodyLarge?.copyWith(color: Colors.grey)),
-                              Text(DateFormat('EEEE, MMMM d').format(DateTime.now()),
-                                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                                  style: theme.textTheme.bodyLarge
+                                      ?.copyWith(color: Colors.grey)),
+                              Text(
+                                  DateFormat('EEEE, MMMM d')
+                                      .format(DateTime.now()),
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
@@ -47,17 +52,22 @@ class HomeScreen extends ConsumerWidget {
                           onTap: () => context.go('/profile'),
                           child: CircleAvatar(
                             backgroundColor: theme.colorScheme.primaryContainer,
-                            child: Icon(Icons.person, color: theme.colorScheme.primary),
+                            child: Icon(Icons.person,
+                                color: theme.colorScheme.primary),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 20),
-                    Text(l10n.today, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    Text(l10n.today,
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
-                    _buildTodayPlan(ref, context, theme, plan, suggestions.value, l10n),
+                    _buildTodayPlan(
+                        ref, context, theme, plan, suggestions.value, l10n),
                     const SizedBox(height: 10),
-                    _buildRandomSuggestion(context, theme, suggestions.value, l10n),
+                    _buildRandomSuggestion(
+                        context, theme, suggestions.value, l10n),
                   ],
                 ),
               ),
@@ -65,7 +75,9 @@ class HomeScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: Text(l10n.everything, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                child: Text(l10n.everything,
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w600)),
               ),
             ),
             SliverPadding(
@@ -95,20 +107,25 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTodayPlan(WidgetRef ref, BuildContext context, ThemeData theme,
-      Map<String, MealPlanEntry> plan, HomeSuggestions? suggestions, AppLocalizations l10n) {
+  Widget _buildTodayPlan(
+      WidgetRef ref,
+      BuildContext context,
+      ThemeData theme,
+      Map<String, MealPlanEntry> plan,
+      HomeSuggestions? suggestions,
+      AppLocalizations l10n) {
     final today = dayNumberFor(DateTime.now());
     final currentSlot = mealForCurrentTime();
     final entries = {
-      for (final slot in mealPlanSlots)
-        slot: plan['$today-$slot'],
+      for (final slot in mealPlanSlots) slot: plan['$today-$slot'],
     };
 
     if (entries.values.every((entry) => entry == null)) {
       return _SuggestionCard(
         icon: Icons.event_note,
-        color: theme.colorScheme.primary,
-        title: suggestions?.hasPlan == true ? l10n.openYourMealPlanner : l10n.nothingPlannedYet,
+        title: suggestions?.hasPlan == true
+            ? l10n.openYourMealPlanner
+            : l10n.nothingPlannedYet,
         subtitle: suggestions?.hasPlan == true
             ? l10n.reviewUpcomingMeals
             : l10n.planYourWeek,
@@ -122,15 +139,19 @@ class HomeScreen extends ConsumerWidget {
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3), width: 1),
+        side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+            width: 1),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: GridView.count(
-          crossAxisCount: 2,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 2.2,
+        child: GridView(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            mainAxisExtent: 106,
+          ),
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: [
@@ -141,10 +162,13 @@ class HomeScreen extends ConsumerWidget {
                 active: slot == currentSlot,
                 onOpen: entries[slot] == null
                     ? () => context.push('/meal-plan')
-                    : () => _openPlanEntry(context, entries[slot]!),
+                    : () => _openPlanEntry(context, ref, entries[slot]!),
                 onMade: entries[slot] == null || entries[slot]!.made
                     ? null
                     : () => _markMade(ref, context, entries[slot]!, l10n),
+                onReSync: entries[slot]?.made == true
+                    ? () => _reSync(ref, context, entries[slot]!, l10n)
+                    : null,
               ),
           ],
         ),
@@ -152,51 +176,76 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _markMade(
-      WidgetRef ref, BuildContext context, MealPlanEntry entry, AppLocalizations l10n) async {
-    await markMealMade(ref, entry);
+  Future<void> _markMade(WidgetRef ref, BuildContext context,
+      MealPlanEntry entry, AppLocalizations l10n) async {
+    final synced = await markMealMade(ref, entry);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
-        content: Text(l10n.niceMarkedAsMade(entry.name)),
-        backgroundColor: Colors.green,
+        content: Text(synced
+            ? l10n.niceMarkedAsMade(entry.name)
+            : 'Marked as made — but couldn\'t sync to insights yet. Tap the ✓ to retry.'),
+        backgroundColor: synced ? Colors.green : Colors.orange,
       ));
   }
 
-  Widget _buildRandomSuggestion(
-      BuildContext context, ThemeData theme, HomeSuggestions? suggestions, AppLocalizations l10n) {
+  Future<void> _reSync(WidgetRef ref, BuildContext context, MealPlanEntry entry,
+      AppLocalizations l10n) async {
+    final synced = await reLogMeal(ref, entry);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(synced
+            ? 'Synced to insights'
+            : 'Could not sync to insights. Try again.'),
+        backgroundColor: synced ? Colors.green : Colors.orange,
+      ));
+  }
+
+  Widget _buildRandomSuggestion(BuildContext context, ThemeData theme,
+      HomeSuggestions? suggestions, AppLocalizations l10n) {
     final dish = suggestions?.randomDish;
     if (dish == null) {
       return _SuggestionCard(
         icon: Icons.casino,
-        color: theme.colorScheme.tertiary,
         title: l10n.addDishToGetSuggestions,
         subtitle: l10n.addDishesInExplore,
         actionLabel: l10n.exploreTitle,
         onTap: () => context.push('/explore'),
       );
     }
-    final time = dish.timeMinutes > 0 ? ' · ${dish.timeMinutes} ${l10n.minLabel}' : '';
+    final time =
+        dish.timeMinutes > 0 ? ' · ${dish.timeMinutes} ${l10n.minLabel}' : '';
     return _SuggestionCard(
       icon: Icons.casino,
-      color: theme.colorScheme.tertiary,
       title: dish.name,
       subtitle: '${dish.description ?? l10n.aTastyPickForYou}$time',
       actionLabel: l10n.surpriseMeAgain,
-      onTap: () => context.push('/dish', extra: (dish, suggestions!.randomSlug)),
+      onTap: () =>
+          context.push('/dish', extra: (dish, suggestions!.randomSlug)),
     );
   }
 
-  void _openPlanEntry(BuildContext context, MealPlanEntry entry) {
+  void _openPlanEntry(
+      BuildContext context, WidgetRef ref, MealPlanEntry entry) {
     final dish = curatedDishById(entry.recipeId);
     if (dish != null) {
-      context.push('/dish',
-          extra: (dish, entry.categorySlug ?? entry.slot));
+      context.push('/dish', extra: (dish, entry.categorySlug ?? entry.slot));
       return;
     }
-    if (entry.categorySlug == null) {
+    final slug = entry.categorySlug;
+    if (slug == null) {
       context.push('/recipe/${entry.recipeId}');
+      return;
+    }
+    final local = ref
+        .read(localDishesProvider)[slug]
+        ?.where((d) => d.id == entry.recipeId)
+        .firstOrNull;
+    if (local != null) {
+      context.push('/dish', extra: (local, slug));
     }
   }
 
@@ -208,14 +257,22 @@ class HomeScreen extends ConsumerWidget {
   }
 
   static List<_Link> _links(BuildContext context) => [
-        _Link(Icons.explore, 'Explore', const Color(0xFF1565C0), () => context.push('/explore')),
-        _Link(Icons.event_note, 'Planner', const Color(0xFFF57C00), () => context.push('/meal-plan')),
-        _Link(Icons.bar_chart, 'Insights', const Color(0xFF2E7D32), () => context.go('/insights')),
-        _Link(Icons.kitchen, 'Kitchen', const Color(0xFF6A1B9A), () => context.go('/kitchen')),
-        _Link(Icons.favorite, 'Favorites', Colors.red, () => context.push('/favorites')),
-        _Link(Icons.shopping_cart, 'Shopping', const Color(0xFF00838F), () => context.push('/shopping-list')),
-        _Link(Icons.history, 'Meal History', const Color(0xFF37474F), () => context.push('/meal-history')),
-        _Link(Icons.person, 'Profile', const Color(0xFFAD1457), () => context.go('/profile')),
+        _Link(Icons.explore, 'Explore', const Color(0xFF1565C0),
+            () => context.push('/explore')),
+        _Link(Icons.event_note, 'Planner', const Color(0xFFF57C00),
+            () => context.push('/meal-plan')),
+        _Link(Icons.bar_chart, 'Insights', const Color(0xFF2E7D32),
+            () => context.go('/insights')),
+        _Link(Icons.kitchen, 'Kitchen', const Color(0xFF6A1B9A),
+            () => context.go('/kitchen')),
+        _Link(Icons.favorite, 'Favorites', Colors.red,
+            () => context.push('/favorites')),
+        _Link(Icons.shopping_cart, 'Shopping', const Color(0xFF00838F),
+            () => context.push('/shopping-list')),
+        _Link(Icons.history, 'Meal History', const Color(0xFF37474F),
+            () => context.push('/meal-history')),
+        _Link(Icons.person, 'Profile', const Color(0xFFAD1457),
+            () => context.go('/profile')),
       ];
 }
 
@@ -233,6 +290,7 @@ class _TodayMealTile extends StatelessWidget {
   final bool active;
   final VoidCallback onOpen;
   final VoidCallback? onMade;
+  final VoidCallback? onReSync;
 
   const _TodayMealTile({
     required this.entry,
@@ -240,13 +298,14 @@ class _TodayMealTile extends StatelessWidget {
     required this.active,
     required this.onOpen,
     this.onMade,
+    this.onReSync,
   });
 
   static const _slotColors = {
     'breakfast': Color(0xFFF59E0B),
     'lunch': Color(0xFF10B981),
-    'snacks': Color(0xFF8B5CF6),
-    'dinner': Color(0xFF3B82F6),
+    'snacks': Color(0xFFEC4899),
+    'dinner': Color(0xFF6366F1),
   };
 
   static const _slotIcons = {
@@ -272,27 +331,42 @@ class _TodayMealTile extends StatelessWidget {
     final icon = _slotIcons[slot] ?? Icons.restaurant;
     final time = _slotTimes[slot] ?? '';
     final isMade = entry?.made == true;
+    final isPlanned = entry != null;
+
+    final bgGradient = isPlanned
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color,
+              Color.lerp(color, Colors.black, 0.38)!,
+            ],
+          )
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              theme.colorScheme.surface.withValues(alpha: 0.3),
+            ],
+          );
+    final onColor =
+        isPlanned ? Colors.white : theme.colorScheme.onSurfaceVariant;
+
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            color.withValues(alpha: active ? 0.18 : 0.10),
-            theme.colorScheme.surface.withValues(alpha: 0.2),
-          ],
-        ),
+        gradient: bgGradient,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: active
-              ? color.withValues(alpha: 0.55)
-              : theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-          width: active ? 1.6 : 1,
+              ? Colors.white.withValues(alpha: 0.75)
+              : Colors.transparent,
+          width: 1.6,
         ),
-        boxShadow: active
+        boxShadow: active && isPlanned
             ? [
                 BoxShadow(
-                  color: color.withValues(alpha: 0.18),
+                  color: color.withValues(alpha: 0.4),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -313,20 +387,41 @@ class _TodayMealTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(icon, size: 14, color: color),
-                    const SizedBox(width: 5),
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: isPlanned
+                            ? Colors.white.withValues(alpha: 0.22)
+                            : color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(icon, size: 15, color: onColor),
+                    ),
+                    const SizedBox(width: 6),
                     Flexible(
                       child: Text(label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.labelSmall?.copyWith(
-                            color: color,
+                            color: isPlanned
+                                ? Colors.white.withValues(alpha: 0.92)
+                                : theme.colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.w800,
                           )),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 4),
                     if (isMade)
-                      const Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 16)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints(minWidth: 22, minHeight: 22),
+                        tooltip: 'Sync to insights',
+                        onPressed: onReSync,
+                        icon: const Icon(Icons.check_circle,
+                            color: Colors.white, size: 18),
+                      )
                     else if (onMade != null)
                       SizedBox(
                         width: 22,
@@ -335,16 +430,18 @@ class _TodayMealTile extends StatelessWidget {
                           padding: EdgeInsets.zero,
                           visualDensity: VisualDensity.compact,
                           style: IconButton.styleFrom(
-                            backgroundColor: color.withValues(alpha: 0.15),
+                            backgroundColor: Colors.white,
+                            foregroundColor: color,
+                            padding: EdgeInsets.zero,
                           ),
                           tooltip: l10n.markMade,
                           onPressed: onMade,
-                          icon: Icon(Icons.check, size: 12, color: color),
+                          icon: const Icon(Icons.check, size: 14),
                         ),
                       ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Text(
                   entry?.name ?? l10n.notPlanned,
                   maxLines: 1,
@@ -353,43 +450,48 @@ class _TodayMealTile extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                     height: 1.15,
-                    color: entry == null
-                        ? Colors.grey
-                        : theme.colorScheme.onSurface,
+                    color: isPlanned ? Colors.white : Colors.grey,
                     decoration: isMade ? TextDecoration.lineThrough : null,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Row(
                   children: [
-                    if (active) ...[
+                    if (active && isPlanned) ...[
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: color,
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(l10n.now,
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: Colors.white,
+                              color: color,
                               fontWeight: FontWeight.w800,
                               fontSize: 9,
                             )),
                       ),
                       const SizedBox(width: 6),
                     ],
-                    Text(time,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: Colors.grey[600],
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                        )),
+                    Flexible(
+                      child: Text(time,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: isPlanned
+                                ? Colors.white.withValues(alpha: 0.85)
+                                : Colors.grey[600],
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          )),
+                    ),
                     const Spacer(),
                     if (isMade)
                       Text(l10n.done,
                           style: theme.textTheme.labelSmall?.copyWith(
-                            color: const Color(0xFF22C55E),
-                            fontSize: 9,
+                            color: Colors.white,
+                            fontSize: 10,
                             fontWeight: FontWeight.w800,
                           )),
                   ],
@@ -438,7 +540,6 @@ class _LinkTile extends StatelessWidget {
 
 class _SuggestionCard extends StatelessWidget {
   final IconData icon;
-  final Color color;
   final String title;
   final String subtitle;
   final String actionLabel;
@@ -446,7 +547,6 @@ class _SuggestionCard extends StatelessWidget {
 
   const _SuggestionCard({
     required this.icon,
-    required this.color,
     required this.title,
     required this.subtitle,
     required this.actionLabel,
@@ -456,23 +556,26 @@ class _SuggestionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
     return Card(
-      color: color.withValues(alpha: 0.08),
+      elevation: 0,
+      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Row(
             children: [
               Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
+                  color: primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color),
+                child: Icon(icon, color: primary, size: 24),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -482,17 +585,19 @@ class _SuggestionCard extends StatelessWidget {
                     Text(title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text(subtitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[700])),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: Colors.grey[700])),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right, color: color),
+              Icon(Icons.chevron_right, color: primary),
             ],
           ),
         ),
